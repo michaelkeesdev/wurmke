@@ -810,16 +810,32 @@
 
             // Enable/disable roll button based on available dice
             if (isMyTurn) {
-                document.getElementById('rollBtn').disabled = game.turnState.availableDice === 0;
-                if (game.turnState.availableDice === 0) {
-                    // Must end turn, no more dice
-                    document.getElementById('rollBtn').textContent = 'Geen dobbelstenen meer!';
-                } else {
-                    document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
-                }
+            if (game.turnState.availableDice > 0) {
+                document.getElementById('rollBtn').disabled = false;
+                document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
             } else {
                 document.getElementById('rollBtn').disabled = true;
+                document.getElementById('rollBtn').textContent = 'Geen dobbelstenen meer!';
+                // Automatisch eindig beurt als geen dobbelstenen over zijn
+                if (game.turnState.availableDice === 0) {
+                    endTurn();  // Roep endTurn aan als er geen dobbelstenen meer zijn
+                }
             }
+            
+            // Toon endTurnBtn alleen als voorwaarden kloppen
+            if (game.turnState.hasWorm && game.turnState.currentScore >= 21) {
+                document.getElementById('endTurnBtn').style.display = 'inline-block';
+                document.getElementById('endTurnBtn').textContent = 'Stop en Neem Tegel (Score: ' + game.turnState.currentScore + ')';
+            } else if (game.turnState.hasWorm) {
+                document.getElementById('endTurnBtn').style.display = 'inline-block';
+                document.getElementById('endTurnBtn').textContent = 'Stop (Min. 21 nodig, nu: ' + game.turnState.currentScore + ')';
+            } else {
+                document.getElementById('endTurnBtn').style.display = 'none';  // Verberg als geen worm
+            }
+        } else {
+            document.getElementById('rollBtn').disabled = true;
+            document.getElementById('endTurnBtn').style.display = 'none';
+        }
             
             document.getElementById('selectFacePrompt').style.display = 'none';
             document.getElementById('diceContainer').innerHTML = '';
@@ -854,17 +870,16 @@
             }
         }
 
-        // Update after face selection
-        function updateAfterFaceSelection(data) {
-            document.getElementById('selectFacePrompt').style.display = 'none';
-            document.getElementById('diceContainer').innerHTML = '';
-            
-            // Re-enable roll button so player can continue or stop
-            if (isMyTurn) {
-                document.getElementById('rollBtn').disabled = false;
-                document.getElementById('endTurnBtn').style.display = 'inline-block';
-            }
+function updateAfterFaceSelection(data) {
+        document.getElementById('selectFacePrompt').style.display = 'none';
+        document.getElementById('diceContainer').innerHTML = '';
+        
+        if (isMyTurn) {
+            document.getElementById('rollBtn').disabled = false;  // Zorg ervoor dat de rollBtn altijd enabled is na selectie
+            document.getElementById('endTurnBtn').style.display = 'inline-block';  // Toon endTurnBtn
+            alert('Je hebt een face geselecteerd. Je score is bijgewerkt. Rol nu door met de resterende dobbelstenen of klik op "Stop en Neem Tegel" om je beurt te eindigen.');
         }
+    }
 
         // Show game over
         function showGameOver(data) {
