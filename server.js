@@ -109,12 +109,13 @@ function processRoll(room, diceResults) {
   );
 
   if (availableFaces.length === 0) {
-    // Bust! Player loses their turn
+    // Bust! Player loses their turn and must return highest tile
     return { valid: true, bust: true };
   }
 
   turnState.rolledDice = diceResults;
-  return { valid: true, bust: false, availableFaces };
+  turnState.faceCounts = faceCounts;
+  return { valid: true, bust: false, availableFaces, faceCounts };
 }
 
 function selectDiceFace(room, face) {
@@ -162,37 +163,63 @@ function endTurn(room, playerId) {
   } else {
     const score = turnState.currentScore;
 
-    // Try to take tile from middle
-    const tileIndex = game.tiles.findIndex((t) => t.number === score);
-    if (tileIndex !== -1) {
-      const tile = game.tiles.splice(tileIndex, 1)[0];
-      game.playerStacks[playerId].push(tile);
+    // Can only take tile if score is 21 or higher
+    if (score < 21) {
+      // Can't take anything, lose highest tile
+      if (game.playerStacks[playerId].length > 0) {
+        const lostTile = game.playerStacks[playerId].pop();
+        game.tiles.push(lostTile);
+        game.tiles.sort((a, b) => a.number - b.number);
+      }
     } else {
-      // Try to steal from another player (highest tile with value < score)
-      let stolenFrom = null;
-      let stolenTile = null;
+      // Try to take tile from middle with exact score
+      const tileIndex = game.tiles.findIndex((t) => t.number === score);
+      if (tileIndex !== -1) {
+        const tile = game.tiles.splice(tileIndex, 1)[0];
+        game.playerStacks[playerId].push(tile);
+      } else {
+        // Try to steal from another player (top tile with exact value = score)
+        let stolenFrom = null;
+        let stolenTile = null;
 
-      for (const [pid, stack] of Object.entries(game.playerStacks)) {
-        if (pid !== playerId && stack.length > 0) {
-          const topTile = stack[stack.length - 1];
-          if (topTile.number < score) {
-            if (!stolenTile || topTile.number > stolenTile.number) {
+        for (const [pid, stack] of Object.entries(game.playerStacks)) {
+          if (pid !== playerId && stack.length > 0) {
+            const topTile = stack[stack.length - 1];
+            if (topTile.number === score) {
               stolenTile = topTile;
               stolenFrom = pid;
+              break;
             }
           }
         }
-      }
 
-      if (stolenTile && stolenFrom) {
-        game.playerStacks[stolenFrom].pop();
-        game.playerStacks[playerId].push(stolenTile);
-      } else {
-        // Can't take anything, lose highest tile
-        if (game.playerStacks[playerId].length > 0) {
-          const lostTile = game.playerStacks[playerId].pop();
-          game.tiles.push(lostTile);
-          game.tiles.sort((a, b) => a.number - b.number);
+        if (stolenTile && stolenFrom) {
+          game.playerStacks[stolenFrom].pop();
+          game.playerStacks[playerId].push(stolenTile);
+        } else {
+          // Try to take highest available tile lower than score
+          let bestTile = null;
+          let bestIndex = -1;
+
+          for (let i = game.tiles.length - 1; i >= 0; i--) {
+            if (game.tiles[i].number < score) {
+              bestTile = game.tiles[i];
+              bestIndex = i;
+              break;
+            }
+          }
+
+          if (bestTile) {
+            game.tiles.splice(bestIndex, 1);
+            game.playerStacks[playerId].push(bestTile);
+          } else {
+            // Can't take anything, lose highest tile
+            if (game.playerStacks[playerId].length > 0) {
+              const lostTile = game.playerStacks[playerId].pop();
+              game.tiles.push(lostTile);
+              game.tiles.sort((a, b) => a.number - b.number);
+            }
+          }
         }
       }
     }
@@ -215,6 +242,7 @@ function endTurn(room, playerId) {
     currentScore: 0,
     hasWorm: false,
     rolledDice: [],
+    faceCounts: {},
   };
 
   return { gameOver: false };
@@ -488,6 +516,7 @@ wss.on("connection", (ws) => {
               playerId: data.playerId,
               diceResults,
               availableFaces: rollResult.availableFaces,
+              faceCounts: rollResult.faceCounts,
               turnState: rollRoom.game.turnState,
             });
           }

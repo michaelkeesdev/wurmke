@@ -565,7 +565,7 @@
                     break;
 
                 case 'dice_rolled':
-                    displayDiceResults(data.diceResults, data.availableFaces);
+                    displayDiceResults(data.diceResults, data.availableFaces, data.faceCounts);
                     break;
 
                 case 'face_selected':
@@ -574,11 +574,13 @@
 
                 case 'turn_ended':
                 case 'turn_bust':
+                    if (data.type === 'turn_bust') {
+                        const bustPlayer = data.playerId === playerId ? 'Je' : getPlayerNameById(data.playerId);
+                        alert(`${bustPlayer} ${data.playerId === playerId ? 'hebt' : 'heeft'} een bust! Geen beschikbare dobbelsteenwaarden meer.`);
+                    }
                     updateGameState(data.gameState);
                     if (data.gameOver) {
                         // Will be handled by game_over message
-                    } else if (data.type === 'turn_bust') {
-                        alert(`${getPlayerName(data.playerId)} kreeg een bust!`);
                     }
                     break;
 
@@ -725,7 +727,7 @@
 
             const playersList = document.getElementById('roomPlayersList');
             playersList.innerHTML = room.players.map(player => `
-                <div class="player-item ${player.id === room.host ? 'host' : ''}">
+                <div class="player-item ${player.id === room.host ? 'host' : ''}" data-player-id="${player.id}">
                     <span>${player.name} ${player.id === room.host ? '👑' : ''}</span>
                 </div>
             `).join('');
@@ -788,21 +790,43 @@
                     `<span class="face-chip">${face === 'worm' ? '🪱' : face}</span>`
                 ).join('');
                 
-                // Show end turn button if player has selected at least one face
-                document.getElementById('endTurnBtn').style.display = isMyTurn ? 'inline-block' : 'none';
+                // Show end turn button if player has at least 21 points and a worm
+                if (isMyTurn) {
+                    if (game.turnState.hasWorm && game.turnState.currentScore >= 21) {
+                        document.getElementById('endTurnBtn').style.display = 'inline-block';
+                        document.getElementById('endTurnBtn').textContent = 'Stop en Neem Tegel (Score: ' + game.turnState.currentScore + ')';
+                    } else if (game.turnState.hasWorm) {
+                        document.getElementById('endTurnBtn').style.display = 'inline-block';
+                        document.getElementById('endTurnBtn').textContent = 'Stop (Min. 21 nodig, nu: ' + game.turnState.currentScore + ')';
+                    } else {
+                        document.getElementById('endTurnBtn').style.display = 'inline-block';
+                        document.getElementById('endTurnBtn').textContent = 'Stop (Worm nodig!)';
+                    }
+                }
             } else {
                 document.getElementById('selectedFacesArea').style.display = 'none';
                 document.getElementById('endTurnBtn').style.display = 'none';
             }
 
-            // Enable/disable roll button
-            document.getElementById('rollBtn').disabled = !isMyTurn || game.turnState.availableDice === 0;
+            // Enable/disable roll button based on available dice
+            if (isMyTurn) {
+                document.getElementById('rollBtn').disabled = game.turnState.availableDice === 0;
+                if (game.turnState.availableDice === 0) {
+                    // Must end turn, no more dice
+                    document.getElementById('rollBtn').textContent = 'Geen dobbelstenen meer!';
+                } else {
+                    document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
+                }
+            } else {
+                document.getElementById('rollBtn').disabled = true;
+            }
+            
             document.getElementById('selectFacePrompt').style.display = 'none';
             document.getElementById('diceContainer').innerHTML = '';
         }
 
         // Display dice results
-        function displayDiceResults(diceResults, availableFaces) {
+        function displayDiceResults(diceResults, availableFaces, faceCounts) {
             const container = document.getElementById('diceContainer');
             container.innerHTML = diceResults.map(face => `
                 <div class="die ${face === 'worm' ? 'worm' : ''}">
@@ -810,14 +834,23 @@
                 </div>
             `).join('');
 
-            // Show face selection
+            // Show face selection with counts
             if (availableFaces && availableFaces.length > 0 && isMyTurn) {
                 document.getElementById('selectFacePrompt').style.display = 'block';
-                document.getElementById('faceButtons').innerHTML = availableFaces.map(face => `
-                    <button onclick="selectFace('${face}')" style="margin: 5px;">
-                        ${face === 'worm' ? '🪱 Worm (5 punten)' : `${face} (${face} punt${face > 1 ? 'en' : ''})`}
-                    </button>
-                `).join('');
+                document.getElementById('rollBtn').disabled = true;
+                document.getElementById('faceButtons').innerHTML = availableFaces.map(face => {
+                    const count = faceCounts[face] || 0;
+                    const value = face === 'worm' ? 5 : parseInt(face);
+                    const totalValue = value * count;
+                    return `
+                        <button onclick="selectFace('${face}')" style="margin: 5px; padding: 15px 20px; font-size: 16px;">
+                            ${face === 'worm' ? '🪱' : face} × ${count} = ${totalValue} punt${totalValue !== 1 ? 'en' : ''}
+                        </button>
+                    `;
+                }).join('');
+            } else {
+                // Re-enable roll button after selection
+                document.getElementById('rollBtn').disabled = !isMyTurn;
             }
         }
 
@@ -826,7 +859,11 @@
             document.getElementById('selectFacePrompt').style.display = 'none';
             document.getElementById('diceContainer').innerHTML = '';
             
-            // This will be followed by a game state update
+            // Re-enable roll button so player can continue or stop
+            if (isMyTurn) {
+                document.getElementById('rollBtn').disabled = false;
+                document.getElementById('endTurnBtn').style.display = 'inline-block';
+            }
         }
 
         // Show game over
@@ -884,8 +921,14 @@
         }
 
         // Helper: Get player name by ID
-        function getPlayerName(pid) {
-            // This would need access to the players list
+        function getPlayerNameById(pid) {
+            // Try to find in current game state
+            const playerElements = document.querySelectorAll('.player-item');
+            for (let elem of playerElements) {
+                if (elem.dataset.playerId === pid) {
+                    return elem.textContent.trim().replace('👑', '').trim();
+                }
+            }
             return 'Speler';
         }
 
