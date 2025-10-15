@@ -119,25 +119,27 @@ function processRoll(room, diceResults) {
 }
 
 function selectDiceFace(room, face) {
-    const { turnState } = room.game;
-    if (turnState.selectedFaces.includes(face)) {
-        return { valid: false, error: "Face already selected" };
-    }
-    if (!turnState.rolledDice.includes(face)) {
-        return { valid: false, error: "Face not in current roll" };
-    }
-    const count = turnState.rolledDice.filter((f) => f === face).length;
-    const value = calculateDiceValue(face);
-    turnState.selectedFaces.push(face);
-    turnState.currentScore += value * count;
-    turnState.availableDice -= count;
-    if (face === "worm") {
-        turnState.hasWorm = true;
-    }
-    turnState.rollId = uuidv4();  // Nieuw rollId voor de volgende worp
-    turnState.rolledDice = [];  // Leeg de gerolde dobbelstenen voor de volgende worp
-    console.log(`Face '${face}' geselecteerd. Nieuwe score: ${turnState.currentScore}. Blijf rollen!`);
-    return { valid: true, count, value: value * count };
+  const { turnState } = room.game;
+  if (turnState.selectedFaces.includes(face)) {
+    return { valid: false, error: "Face already selected" };
+  }
+  if (!turnState.rolledDice.includes(face)) {
+    return { valid: false, error: "Face not in current roll" };
+  }
+  const count = turnState.rolledDice.filter((f) => f === face).length;
+  const value = calculateDiceValue(face);
+  turnState.selectedFaces.push(face);
+  turnState.currentScore += value * count;
+  turnState.availableDice -= count;
+  if (face === "worm") {
+    turnState.hasWorm = true;
+  }
+  turnState.rollId = uuidv4(); // Nieuw rollId voor de volgende worp
+  turnState.rolledDice = []; // Leeg de gerolde dobbelstenen voor de volgende worp
+  console.log(
+    `Face '${face}' geselecteerd. Nieuwe score: ${turnState.currentScore}. Blijf rollen!`
+  );
+  return { valid: true, count, value: value * count };
 }
 
 function endTurn(room, playerId) {
@@ -147,49 +149,73 @@ function endTurn(room, playerId) {
   // Must have at least one worm to claim a tile
   if (!turnState.hasWorm) {
     // Lose highest tile if any
-    // Verlies hoogste tegel als geen worm
-        if (game.playerStacks[playerId].length > 0) {
-            const lostTile = game.playerStacks[playerId].pop();
-            game.tiles.push(lostTile);
-            game.tiles.sort((a, b) => a.number - b.number);
-        }
+    if (game.playerStacks[playerId].length > 0) {
+      const lostTile = game.playerStacks[playerId].pop();
+      game.tiles.push(lostTile);
+      game.tiles.sort((a, b) => a.number - b.number);
+    }
   } else {
     const score = turnState.currentScore;
 
     // Can only take tile if score is 21 or higher
-    if (turnState.currentScore >= 21) {
-        // Probeer tegel te claimen
-        const tileIndex = game.tiles.findIndex((t) => t.number === turnState.currentScore);
-        if (tileIndex !== -1) {
-            const tile = game.tiles.splice(tileIndex, 1)[0];
-            game.playerStacks[playerId].push(tile);
-        } else {
-            // Andere logica voor stelen of hoogste lagere tegel (zoals in originele code)
-            // ... (de rest blijft hetzelfde) ...
-        }
+    if (score < 21) {
+      // Can't take anything, lose highest tile
+      if (game.playerStacks[playerId].length > 0) {
+        const lostTile = game.playerStacks[playerId].pop();
+        game.tiles.push(lostTile);
+        game.tiles.sort((a, b) => a.number - b.number);
+      }
     } else {
       // Try to take tile from middle with exact score
-      // Geen tegel als score < 21
-        if (game.playerStacks[playerId].length > 0) {
-            const lostTile = game.playerStacks[playerId].pop();
-            game.tiles.push(lostTile);
-            game.tiles.sort((a, b) => a.number - b.number);
+      const tileIndex = game.tiles.findIndex((t) => t.number === score);
+      if (tileIndex !== -1) {
+        const tile = game.tiles.splice(tileIndex, 1)[0];
+        game.playerStacks[playerId].push(tile);
+      } else {
+        // Try to steal from another player (top tile with exact value = score)
+        let stolenFrom = null;
+        let stolenTile = null;
+
+        for (const [pid, stack] of Object.entries(game.playerStacks)) {
+          if (pid !== playerId && stack.length > 0) {
+            const topTile = stack[stack.length - 1];
+            if (topTile.number === score) {
+              stolenTile = topTile;
+              stolenFrom = pid;
+              break;
+            }
+          }
         }
-          
+
+        if (stolenTile && stolenFrom) {
+          game.playerStacks[stolenFrom].pop();
+          game.playerStacks[playerId].push(stolenTile);
+        } else {
+          // Try to take highest available tile lower than score
+          let bestTile = null;
+          let bestIndex = -1;
+
+          for (let i = game.tiles.length - 1; i >= 0; i--) {
+            if (game.tiles[i].number < score) {
+              bestTile = game.tiles[i];
+              bestIndex = i;
+              break;
+            }
+          }
+
+          if (bestTile) {
+            game.tiles.splice(bestIndex, 1);
+            game.playerStacks[playerId].push(bestTile);
+          } else {
+            // Can't take anything, lose highest tile
+            if (game.playerStacks[playerId].length > 0) {
+              const lostTile = game.playerStacks[playerId].pop();
+              game.tiles.push(lostTile);
+              game.tiles.sort((a, b) => a.number - b.number);
+            }
+          }
+        }
       }
-      game.currentPlayerIndex = (game.currentPlayerIndex + 1) % room.players.length;
-    game.currentPlayerId = room.players[game.currentPlayerIndex];
-    game.turnState = {
-        rollId: uuidv4(),
-        availableDice: 8,
-        selectedFaces: [],
-        currentScore: 0,
-        hasWorm: false,
-        rolledDice: [],
-        faceCounts: {},
-    };
-    console.log(`Beurt van speler ${playerId} geëindigd. Volgende speler: ${game.currentPlayerId}`);
-    return { gameOver: game.tiles.length === 0 };
     }
   }
 
