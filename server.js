@@ -166,18 +166,15 @@ function selectDiceFace(room, face) {
   return { valid: true, count, value: pointsGained };
 }
 
-function endPlayerTurnWithoutAnything(room, playerId) {
+function endPlayerTurnBust(room, playerId) {
   const { game } = room;
   const { turnState } = game;
 
   // Player must have a worm to take anything
-  if (!turnState.hasWorm) {
-    // Return highest tile if player has any
-    if (game.playerStacks[playerId].length > 0) {
-      const lostTile = game.playerStacks[playerId].pop();
-      game.tiles.push(lostTile);
-      game.tiles.sort((a, b) => a.number - b.number);
-    }
+  if (!turnState.hasWorm && game.playerStacks[playerId].length > 0) {
+    const lostTile = game.playerStacks[playerId].pop();
+    game.tiles.push(lostTile);
+    game.tiles.sort((a, b) => a.number - b.number);
   }
 
   // Check if game is over
@@ -207,58 +204,22 @@ function endPlayerTurn(room, tile, playerId) {
   const { number } = tile;
   const { turnState } = game;
 
-  // Player has worm - try to take tile
   const score = turnState.currentScore;
-
-  if (score < 21) {
-    // Score too low, return highest tile
-    if (game.playerStacks[playerId].length > 0) {
-      const lostTile = game.playerStacks[playerId].pop();
-      game.tiles.push(lostTile);
-      game.tiles.sort((a, b) => a.number - b.number);
-    }
+  let takenTile = null;
+  // 1. Get from the pile of tiles
+  const tileIndex = game.tiles.findIndex((t) => t.number === number);
+  if (tileIndex > -1) {
+    takenTile = game.tiles.splice(tileIndex + 1, 1)[0];
+    game.playerStacks[playerId].push(takenTile);
   } else {
-    // Try to take tile matching exact score
-    let takenTile = null;
-
-    // 1. Try from middle pile
-    const exactIndex = game.tiles.findIndex((t) => t.number === number);
-    if (exactIndex !== -1) {
-      takenTile = game.tiles.splice(exactIndex, 1)[0];
-      game.playerStacks[playerId].push(takenTile);
-    } else {
-      // 2. Try to steal from another player's top tile
-      let stolen = false;
-      for (const [pid, stack] of Object.entries(game.playerStacks)) {
-        if (pid !== playerId && stack.length > 0) {
-          const topTile = stack[stack.length - 1];
-          if (topTile.number === score) {
-            stack.pop();
-            game.playerStacks[playerId].push(topTile);
-            stolen = true;
-            break;
-          }
-        }
-      }
-
-      if (!stolen) {
-        // 3. Take highest tile lower than score
-        let bestIdx = -1;
-        for (let i = game.tiles.length - 1; i >= 0; i--) {
-          if (game.tiles[i].number < score) {
-            bestIdx = i;
-            break;
-          }
-        }
-
-        if (bestIdx !== -1) {
-          takenTile = game.tiles.splice(bestIdx, 1)[0];
-          game.playerStacks[playerId].push(takenTile);
-        } else if (game.playerStacks[playerId].length > 0) {
-          // No tile available, return highest
-          const lostTile = game.playerStacks[playerId].pop();
-          game.tiles.push(lostTile);
-          game.tiles.sort((a, b) => a.number - b.number);
+    // 2. Try to steal from another player's top tile
+    for (const [pid, stack] of Object.entries(game.playerStacks)) {
+      if (pid !== playerId && stack.length > 0) {
+        const topTile = stack[stack.length - 1];
+        if (topTile.number === score) {
+          stack.pop();
+          game.playerStacks[playerId].push(topTile);
+          break;
         }
       }
     }
@@ -635,10 +596,7 @@ wss.on("connection", (ws) => {
             return;
           }
 
-          const turnResult = endPlayerTurnWithoutAnything(
-            stopRoom,
-            data.playerId
-          );
+          const turnResult = endPlayerTurnBust(stopRoom, data.playerId);
 
           broadcastToRoom(data.roomId, {
             type: "turn_ended",

@@ -170,9 +170,10 @@
         }
 
         .tile {
-            background: linear-gradient(135deg, #8b4513 0%, #d2691e 100%);
-            color: white;
-            padding: 12px;
+            width: 100%;
+            background: #e3f2fd;
+            color: #444;
+            padding: 16px;
             margin: 8px 0;
             border-radius: 8px;
             display: flex;
@@ -180,6 +181,7 @@
             align-items: center;
             font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            border: 1px solid #555;
             cursor: pointer;
             transition: all 0.3s;
         }
@@ -436,7 +438,7 @@
         <!-- Room Screen -->
         <div id="roomScreen" class="screen">
             <h2 id="roomTitle">Kamer</h2>
-            <button onclick="leaveRoom()" style="float: right;">Verlaat Kamer</button>
+            <button onclick="leaveRoom()">Verlaat Kamer</button>
             
             <div class="players-list">
                 <h3>Spelers (<span id="playerCount">0</span>/7)</h3>
@@ -445,7 +447,7 @@
 
             <div id="hostControls" style="display: none;">
                 <button onclick="startGame()" id="startGameBtn">Start Spel</button>
-                <p style="color: #666; margin-top: 10px;">Je hebt minimaal 3 spelers nodig om te starten.</p>
+                <p style="color: #666; margin-top: 10px;">Je hebt minimaal 2 spelers nodig om te starten.</p>
             </div>
         </div>
 
@@ -483,8 +485,8 @@
                     </div>
 
                     <div class="action-buttons" id="gameActions">
-                        <button onclick="rollDice()" id="rollBtn">Gooi Dobbelstenen</button>
-                        <button onclick="stopTurn()" id="stopBtn" style="display: none;">Stop of neem een tegel</button>
+                        <button onclick="rollDice()" id="rollBtn">Gooi dobbelstenen</button>
+                        <button onclick="stopTurn()" id="stopBtn" style="display: none;">Geef op. Ik kan niks</button>
                     </div>
 
                     <div id="gameMessages"></div>
@@ -770,7 +772,7 @@
 
             if (room.host === playerId) {
                 document.getElementById('hostControls').style.display = 'block';
-                document.getElementById('startGameBtn').disabled = room.players.length < 3;
+                document.getElementById('startGameBtn').disabled = room.players.length < 2;
             } else {
                 document.getElementById('hostControls').style.display = 'none';
             }
