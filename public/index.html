@@ -154,16 +154,6 @@
             border: 2px solid #ffd93d;
         }
 
-        .player-item.current {
-            border: 2px solid #6bcf7f;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(107, 207, 127, 0.7); }
-            50% { box-shadow: 0 0 0 10px rgba(107, 207, 127, 0); }
-        }
-
         .game-board {
             display: grid;
             grid-template-columns: 1fr 2fr 1fr;
@@ -190,6 +180,18 @@
             align-items: center;
             font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tile:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .tile.taken {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .worm-icon {
@@ -292,6 +294,7 @@
             gap: 10px;
             justify-content: center;
             margin: 20px 0;
+            flex-wrap: wrap;
         }
 
         .history-table {
@@ -371,6 +374,37 @@
             font-size: 80px;
             margin: 20px 0;
         }
+
+        .face-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin: 15px 0;
+        }
+
+        .face-buttons button {
+            padding: 15px 20px;
+            font-size: 16px;
+        }
+
+        .info-message {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #1976d2;
+        }
+
+        .warning-message {
+            background: #fff3e0;
+            color: #f57c00;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #f57c00;
+        }
     </style>
 </head>
 <body>
@@ -448,15 +482,17 @@
 
                     <div class="dice-container" id="diceContainer"></div>
 
-                    <div class="action-buttons" id="gameActions">
-                        <button onclick="rollDice()" id="rollBtn">Gooi Dobbelstenen</button>
-                        <button onclick="endTurn()" id="endTurnBtn" style="display: none;">Stop en Neem Tegel</button>
-                    </div>
-
                     <div id="selectFacePrompt" style="display: none; margin: 20px 0;">
                         <h4>Selecteer een dobbelsteenwaarde:</h4>
-                        <div id="faceButtons"></div>
+                        <div class="face-buttons" id="faceButtons"></div>
                     </div>
+
+                    <div class="action-buttons" id="gameActions">
+                        <button onclick="rollDice()" id="rollBtn">Gooi Dobbelstenen</button>
+                        <button onclick="stopTurn()" id="stopBtn" style="display: none;">Stop & Neem Tegel</button>
+                    </div>
+
+                    <div id="gameMessages"></div>
                 </div>
 
                 <!-- Player Stacks -->
@@ -506,10 +542,9 @@
         let playerId = null;
         let playerName = '';
         let currentRoomId = null;
-        let currentRollId = null;
         let isMyTurn = false;
+        let currentGameState = null;
 
-        // Connect to WebSocket
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const host = window.location.host;
@@ -534,7 +569,6 @@
             };
         }
 
-        // Handle incoming messages
         function handleMessage(data) {
             console.log('Received:', data);
 
@@ -560,8 +594,9 @@
                     break;
 
                 case 'game_started':
+                    currentGameState = data.game;
                     showScreen('gameScreen');
-                    updateGameState(data.game);
+                    updateGameDisplay();
                     break;
 
                 case 'dice_rolled':
@@ -569,18 +604,22 @@
                     break;
 
                 case 'face_selected':
-                    updateAfterFaceSelection(data);
+                    currentGameState = data.gameState;
+                    updateGameDisplay();
+                    showMessage(`Face ${data.face} geselecteerd! Score: +${data.value}`);
                     break;
 
                 case 'turn_ended':
                 case 'turn_bust':
+                    currentGameState = data.gameState;
                     if (data.type === 'turn_bust') {
-                        const bustPlayer = data.playerId === playerId ? 'Je' : getPlayerNameById(data.playerId);
-                        alert(`${bustPlayer} ${data.playerId === playerId ? 'hebt' : 'heeft'} een bust! Geen beschikbare dobbelsteenwaarden meer.`);
+                        showMessage(`${data.playerName} is kapotgerold! Geen geschikte dobbelstenen meer.`, 'warning');
+                    } else {
+                        showMessage(`${data.playerName} heeft de beurt beëindigd.`);
                     }
-                    updateGameState(data.gameState);
+                    updateGameDisplay();
                     if (data.gameOver) {
-                        // Will be handled by game_over message
+                        setTimeout(() => {}, 1000);
                     }
                     break;
 
@@ -598,7 +637,6 @@
             }
         }
 
-        // Register player
         function register() {
             const name = document.getElementById('playerName').value.trim();
             if (!name) {
@@ -607,14 +645,12 @@
             }
 
             playerName = name;
-            
             ws.send(JSON.stringify({
                 type: 'register',
                 name: name
             }));
         }
 
-        // Create room
         function createRoom() {
             const roomName = document.getElementById('roomName').value.trim();
             if (!roomName) {
@@ -629,7 +665,6 @@
             }));
         }
 
-        // Join room
         function joinRoom(roomId) {
             currentRoomId = roomId;
             ws.send(JSON.stringify({
@@ -639,7 +674,6 @@
             }));
         }
 
-        // Leave room
         function leaveRoom() {
             ws.send(JSON.stringify({
                 type: 'leave_room',
@@ -650,7 +684,6 @@
             showScreen('homeScreen');
         }
 
-        // Start game
         function startGame() {
             ws.send(JSON.stringify({
                 type: 'start_game',
@@ -659,7 +692,6 @@
             }));
         }
 
-        // Roll dice
         function rollDice() {
             if (!isMyTurn) {
                 alert('Het is niet jouw beurt!');
@@ -669,12 +701,10 @@
             ws.send(JSON.stringify({
                 type: 'roll_dice',
                 playerId: playerId,
-                roomId: currentRoomId,
-                rollId: currentRollId
+                roomId: currentRoomId
             }));
         }
 
-        // Select face
         function selectFace(face) {
             ws.send(JSON.stringify({
                 type: 'select_face',
@@ -684,21 +714,33 @@
             }));
         }
 
-        // End turn
-        function endTurn() {
+        function stopTurn() {
             if (!isMyTurn) {
                 alert('Het is niet jouw beurt!');
                 return;
             }
 
             ws.send(JSON.stringify({
-                type: 'end_turn',
+                type: 'stop_turn',
                 playerId: playerId,
                 roomId: currentRoomId
             }));
         }
 
-        // Update rooms list
+        function claimTile(tileNumber) {
+            if (!isMyTurn) {
+                alert('Het is niet jouw beurt!');
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'claim_tile',
+                playerId: playerId,
+                roomId: currentRoomId,
+                tileNumber: tileNumber
+            }));
+        }
+
         function updateRoomsList(rooms) {
             const container = document.getElementById('roomsList');
             
@@ -719,7 +761,6 @@
             `).join('');
         }
 
-        // Update room view
         function updateRoomView(room) {
             showScreen('roomScreen');
             document.getElementById('roomTitle').textContent = room.name;
@@ -732,7 +773,6 @@
                 </div>
             `).join('');
 
-            // Show host controls
             if (room.host === playerId) {
                 document.getElementById('hostControls').style.display = 'block';
                 document.getElementById('startGameBtn').disabled = room.players.length < 3;
@@ -741,12 +781,15 @@
             }
         }
 
-        // Update game state
-        function updateGameState(game) {
-            // Update available tiles
+        function updateGameDisplay() {
+            if (!currentGameState) return;
+
+            const game = currentGameState;
+
+            // Update tiles
             const tilesContainer = document.getElementById('availableTiles');
             tilesContainer.innerHTML = game.tiles.map(tile => `
-                <div class="tile">
+                <div class="tile" onclick="claimTile(${tile.number})">
                     <span>${tile.number}</span>
                     <span class="worm-icon">${'🪱'.repeat(tile.worms)}</span>
                 </div>
@@ -761,7 +804,7 @@
                     <div class="player-stack">
                         <h4>${player.name} (${totalWorms} 🪱)</h4>
                         ${stack.length > 0 ? stack.map(tile => `
-                            <div class="tile" style="margin: 5px 0;">
+                            <div class="tile">
                                 <span>${tile.number}</span>
                                 <span class="worm-icon">${'🪱'.repeat(tile.worms)}</span>
                             </div>
@@ -772,76 +815,52 @@
 
             // Update turn info
             isMyTurn = game.currentPlayerId === playerId;
-            currentRollId = game.turnState.rollId;
-            
             const currentPlayer = game.players.find(p => p.id === game.currentPlayerId);
-            document.getElementById('currentPlayerName').textContent = currentPlayer ? currentPlayer.name : 'Onbekend';
             
             if (isMyTurn) {
                 document.getElementById('turnInfo').innerHTML = '<p style="color: #6bcf7f; font-weight: bold; font-size: 20px;">🎲 JOUW BEURT!</p>';
+            } else {
+                document.getElementById('turnInfo').innerHTML = `<p><strong>${currentPlayer ? currentPlayer.name : 'Onbekend'}</strong> is aan de beurt</p>`;
             }
 
-            // Update score and selected faces
+            // Update score
             document.getElementById('scoreDisplay').textContent = `Score: ${game.turnState.currentScore}`;
-            
+
+            // Update selected faces
             if (game.turnState.selectedFaces.length > 0) {
                 document.getElementById('selectedFacesArea').style.display = 'block';
                 document.getElementById('selectedFaces').innerHTML = game.turnState.selectedFaces.map(face => 
                     `<span class="face-chip">${face === 'worm' ? '🪱' : face}</span>`
                 ).join('');
-                
-                // Show end turn button if player has at least 21 points and a worm
-                if (isMyTurn) {
-                    if (game.turnState.hasWorm && game.turnState.currentScore >= 21) {
-                        document.getElementById('endTurnBtn').style.display = 'inline-block';
-                        document.getElementById('endTurnBtn').textContent = 'Stop en Neem Tegel (Score: ' + game.turnState.currentScore + ')';
-                    } else if (game.turnState.hasWorm) {
-                        document.getElementById('endTurnBtn').style.display = 'inline-block';
-                        document.getElementById('endTurnBtn').textContent = 'Stop (Min. 21 nodig, nu: ' + game.turnState.currentScore + ')';
-                    } else {
-                        document.getElementById('endTurnBtn').style.display = 'inline-block';
-                        document.getElementById('endTurnBtn').textContent = 'Stop (Worm nodig!)';
-                    }
-                }
             } else {
                 document.getElementById('selectedFacesArea').style.display = 'none';
-                document.getElementById('endTurnBtn').style.display = 'none';
             }
 
-            // Enable/disable roll button based on available dice
+            // Update buttons
             if (isMyTurn) {
-            if (game.turnState.availableDice > 0) {
-                document.getElementById('rollBtn').disabled = false;
-                document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
+                if (game.turnState.availableDice > 0) {
+                    document.getElementById('rollBtn').disabled = false;
+                    document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
+                } else {
+                    document.getElementById('rollBtn').disabled = true;
+                    document.getElementById('rollBtn').textContent = 'Geen dobbelstenen meer!';
+                }
+
+                // Show stop button if has worm and score >= 21
+                if (game.turnState.hasWorm && game.turnState.currentScore >= 21) {
+                    document.getElementById('stopBtn').style.display = 'inline-block';
+                } else {
+                    document.getElementById('stopBtn').style.display = 'none';
+                }
             } else {
                 document.getElementById('rollBtn').disabled = true;
-                document.getElementById('rollBtn').textContent = 'Geen dobbelstenen meer!';
-                // Automatisch eindig beurt als geen dobbelstenen over zijn
-                if (game.turnState.availableDice === 0) {
-                    endTurn();  // Roep endTurn aan als er geen dobbelstenen meer zijn
-                }
+                document.getElementById('stopBtn').style.display = 'none';
             }
-            
-            // Toon endTurnBtn alleen als voorwaarden kloppen
-            if (game.turnState.hasWorm && game.turnState.currentScore >= 21) {
-                document.getElementById('endTurnBtn').style.display = 'inline-block';
-                document.getElementById('endTurnBtn').textContent = 'Stop en Neem Tegel (Score: ' + game.turnState.currentScore + ')';
-            } else if (game.turnState.hasWorm) {
-                document.getElementById('endTurnBtn').style.display = 'inline-block';
-                document.getElementById('endTurnBtn').textContent = 'Stop (Min. 21 nodig, nu: ' + game.turnState.currentScore + ')';
-            } else {
-                document.getElementById('endTurnBtn').style.display = 'none';  // Verberg als geen worm
-            }
-        } else {
-            document.getElementById('rollBtn').disabled = true;
-            document.getElementById('endTurnBtn').style.display = 'none';
-        }
-            
+
             document.getElementById('selectFacePrompt').style.display = 'none';
             document.getElementById('diceContainer').innerHTML = '';
         }
 
-        // Display dice results
         function displayDiceResults(diceResults, availableFaces, faceCounts) {
             const container = document.getElementById('diceContainer');
             container.innerHTML = diceResults.map(face => `
@@ -850,7 +869,6 @@
                 </div>
             `).join('');
 
-            // Show face selection with counts
             if (availableFaces && availableFaces.length > 0 && isMyTurn) {
                 document.getElementById('selectFacePrompt').style.display = 'block';
                 document.getElementById('rollBtn').disabled = true;
@@ -859,29 +877,23 @@
                     const value = face === 'worm' ? 5 : parseInt(face);
                     const totalValue = value * count;
                     return `
-                        <button onclick="selectFace('${face}')" style="margin: 5px; padding: 15px 20px; font-size: 16px;">
-                            ${face === 'worm' ? '🪱' : face} × ${count} = ${totalValue} punt${totalValue !== 1 ? 'en' : ''}
+                        <button onclick="selectFace('${face}')" style="margin: 5px;">
+                            ${face === 'worm' ? '🪱' : face} × ${count} = ${totalValue}pt
                         </button>
                     `;
                 }).join('');
-            } else {
-                // Re-enable roll button after selection
-                document.getElementById('rollBtn').disabled = !isMyTurn;
             }
         }
 
-function updateAfterFaceSelection(data) {
-        document.getElementById('selectFacePrompt').style.display = 'none';
-        document.getElementById('diceContainer').innerHTML = '';
-        
-        if (isMyTurn) {
-            document.getElementById('rollBtn').disabled = false;  // Zorg ervoor dat de rollBtn altijd enabled is na selectie
-            document.getElementById('endTurnBtn').style.display = 'inline-block';  // Toon endTurnBtn
-            alert('Je hebt een face geselecteerd. Je score is bijgewerkt. Rol nu door met de resterende dobbelstenen of klik op "Stop en Neem Tegel" om je beurt te eindigen.');
+        function showMessage(message, type = 'info') {
+            const messagesDiv = document.getElementById('gameMessages');
+            const className = type === 'warning' ? 'warning-message' : 'info-message';
+            messagesDiv.innerHTML = `<div class="${className}">${message}</div>`;
+            setTimeout(() => {
+                messagesDiv.innerHTML = '';
+            }, 3000);
         }
-    }
 
-        // Show game over
         function showGameOver(data) {
             document.getElementById('winnerName').textContent = `Winnaar: ${data.winner.name}`;
             document.getElementById('winnerScore').textContent = `Met ${data.winner.worms} wormen! 🪱`;
@@ -896,13 +908,11 @@ function updateAfterFaceSelection(data) {
             document.getElementById('gameOverModal').classList.add('active');
         }
 
-        // Close game over modal
         function closeGameOver() {
             document.getElementById('gameOverModal').classList.remove('active');
             returnHome();
         }
 
-        // Show history
         function showHistory() {
             ws.send(JSON.stringify({
                 type: 'get_history',
@@ -911,7 +921,6 @@ function updateAfterFaceSelection(data) {
             showScreen('historyScreen');
         }
 
-        // Display history
         function displayHistory(history) {
             const tbody = document.getElementById('historyBody');
             
@@ -935,21 +944,9 @@ function updateAfterFaceSelection(data) {
             }).join('');
         }
 
-        // Helper: Get player name by ID
-        function getPlayerNameById(pid) {
-            // Try to find in current game state
-            const playerElements = document.querySelectorAll('.player-item');
-            for (let elem of playerElements) {
-                if (elem.dataset.playerId === pid) {
-                    return elem.textContent.trim().replace('👑', '').trim();
-                }
-            }
-            return 'Speler';
-        }
-
-        // Return to home
         function returnHome() {
             currentRoomId = null;
+            currentGameState = null;
             showScreen('homeScreen');
             ws.send(JSON.stringify({
                 type: 'register',
@@ -957,7 +954,6 @@ function updateAfterFaceSelection(data) {
             }));
         }
 
-        // Show screen
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(screen => {
                 screen.classList.remove('active');
@@ -965,10 +961,8 @@ function updateAfterFaceSelection(data) {
             document.getElementById(screenId).classList.add('active');
         }
 
-        // Initialize
         connectWebSocket();
 
-        // Enter key support
         document.getElementById('playerName').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') register();
         });
@@ -976,6 +970,7 @@ function updateAfterFaceSelection(data) {
         document.getElementById('roomName').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') createRoom();
         });
+
     </script>
-</body>
+    </body>
 </html>
