@@ -1,10 +1,3 @@
-if (gameRoom.players.length < 2) {
-  broadcast(ws, {
-    type: "error",
-    message: "Need at least 2 players",
-  });
-  return;
-}
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
