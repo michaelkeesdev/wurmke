@@ -189,11 +189,6 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        .tile.taken {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
         .worm-icon {
             font-size: 20px;
         }
@@ -727,20 +722,6 @@
             }));
         }
 
-        function claimTile(tileNumber) {
-            if (!isMyTurn) {
-                alert('Het is niet jouw beurt!');
-                return;
-            }
-
-            ws.send(JSON.stringify({
-                type: 'claim_tile',
-                playerId: playerId,
-                roomId: currentRoomId,
-                tileNumber: tileNumber
-            }));
-        }
-
         function updateRoomsList(rooms) {
             const container = document.getElementById('roomsList');
             
@@ -789,7 +770,7 @@
             // Update tiles
             const tilesContainer = document.getElementById('availableTiles');
             tilesContainer.innerHTML = game.tiles.map(tile => `
-                <div class="tile" onclick="claimTile(${tile.number})">
+                <div class="tile">
                     <span>${tile.number}</span>
                     <span class="worm-icon">${'🪱'.repeat(tile.worms)}</span>
                 </div>
@@ -970,7 +951,6 @@
         document.getElementById('roomName').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') createRoom();
         });
-
     </script>
-    </body>
+</body>
 </html>
