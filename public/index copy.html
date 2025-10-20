@@ -189,23 +189,6 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        .tile.claimable {
-            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.4);
-            animation: pulse-green 2s infinite;
-        }
-
-        @keyframes pulse-green {
-            0%, 100% { box-shadow: 0 4px 10px rgba(46, 204, 113, 0.4); }
-            50% { box-shadow: 0 4px 15px rgba(46, 204, 113, 0.8); }
-        }
-
-        .tile.claimable:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px rgba(46, 204, 113, 0.8);
-        }
-
         .worm-icon {
             font-size: 20px;
         }
@@ -500,12 +483,8 @@
                     </div>
 
                     <div class="action-buttons" id="gameActions">
-                        <button onclick="rollDice()" id="rollBtn" style="display: none;">Gooi Dobbelstenen</button>
-                    </div>
-                    
-                    <div id="tileSelectionInfo" style="display: none; margin: 15px 0;">
-                        <p style="color: #f57c00; font-weight: bold;">Je kunt nu een tegel kiezen!</p>
-                        <p style="font-size: 14px;">Klik op een tegel links (je score of lager) om die te nemen.</p>
+                        <button onclick="rollDice()" id="rollBtn">Gooi Dobbelstenen</button>
+                        <button onclick="stopTurn()" id="stopBtn" style="display: none;">Stop & Neem Tegel</button>
                     </div>
 
                     <div id="gameMessages"></div>
@@ -730,17 +709,16 @@
             }));
         }
 
-        function claimTile(tileNumber) {
+        function stopTurn() {
             if (!isMyTurn) {
                 alert('Het is niet jouw beurt!');
                 return;
             }
 
             ws.send(JSON.stringify({
-                type: 'claim_tile',
+                type: 'stop_turn',
                 playerId: playerId,
-                roomId: currentRoomId,
-                tileNumber: tileNumber
+                roomId: currentRoomId
             }));
         }
 
@@ -791,15 +769,12 @@
 
             // Update tiles
             const tilesContainer = document.getElementById('availableTiles');
-            tilesContainer.innerHTML = game.tiles.map(tile => {
-                const canClaim = isMyTurn && game.turnState.hasWorm && game.turnState.currentScore >= 21 && tile.number <= game.turnState.currentScore;
-                return `
-                    <div class="tile ${canClaim ? 'claimable' : ''}" onclick="${canClaim ? `claimTile(${tile.number})` : ''}">
-                        <span>${tile.number}</span>
-                        <span class="worm-icon">${'🪱'.repeat(tile.worms)}</span>
-                    </div>
-                `;
-            }).join('');
+            tilesContainer.innerHTML = game.tiles.map(tile => `
+                <div class="tile">
+                    <span>${tile.number}</span>
+                    <span class="worm-icon">${'🪱'.repeat(tile.worms)}</span>
+                </div>
+            `).join('');
 
             // Update player stacks
             const stacksContainer = document.getElementById('playerStacksContainer');
@@ -842,28 +817,25 @@
                 document.getElementById('selectedFacesArea').style.display = 'none';
             }
 
-            // Update buttons and tile selection info
+            // Update buttons
             if (isMyTurn) {
-                // Show roll button only if dice available and not yet in tile selection
-                if (game.turnState.availableDice > 0 && game.turnState.selectedFaces.length === 0) {
-                    document.getElementById('rollBtn').style.display = 'inline-block';
-                    document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
-                } else if (game.turnState.availableDice > 0 && game.turnState.selectedFaces.length > 0) {
-                    document.getElementById('rollBtn').style.display = 'inline-block';
+                if (game.turnState.availableDice > 0) {
+                    document.getElementById('rollBtn').disabled = false;
                     document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
                 } else {
-                    document.getElementById('rollBtn').style.display = 'none';
+                    document.getElementById('rollBtn').disabled = true;
+                    document.getElementById('rollBtn').textContent = 'Geen dobbelstenen meer!';
                 }
 
-                // Show tile selection info if player can claim a tile
-                if (game.turnState.hasWorm && game.turnState.currentScore >= 21 && game.turnState.availableDice === 0) {
-                    document.getElementById('tileSelectionInfo').style.display = 'block';
+                // Show stop button if has worm and score >= 21
+                if (game.turnState.hasWorm && game.turnState.currentScore >= 21) {
+                    document.getElementById('stopBtn').style.display = 'inline-block';
                 } else {
-                    document.getElementById('tileSelectionInfo').style.display = 'none';
+                    document.getElementById('stopBtn').style.display = 'none';
                 }
             } else {
-                document.getElementById('rollBtn').style.display = 'none';
-                document.getElementById('tileSelectionInfo').style.display = 'none';
+                document.getElementById('rollBtn').disabled = true;
+                document.getElementById('stopBtn').style.display = 'none';
             }
 
             document.getElementById('selectFacePrompt').style.display = 'none';
