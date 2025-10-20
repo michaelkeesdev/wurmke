@@ -834,9 +834,11 @@
             // Update buttons
             if (isMyTurn) {
                 if (game.turnState.availableDice > 0) {
+                    document.getElementById('rollBtn').style.display = 'inline-block';
                     document.getElementById('rollBtn').disabled = false;
                     document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
                 } else {
+                    document.getElementById('rollBtn').style.display = 'inline-block';
                     document.getElementById('rollBtn').disabled = true;
                     document.getElementById('rollBtn').textContent = 'Geen dobbelstenen meer!';
                 }
@@ -844,7 +846,7 @@
                 // Show stop button if has worm and score >= 21
                 if (game.turnState.hasWorm && game.turnState.currentScore >= 21) {
                     document.getElementById('stopBtn').style.display = 'inline-block';
-                    document.getElementById('availableTiles').childNodes?.forEach((btn) => {
+                    document.getElementById('availableTiles').childNodes.forEach((btn) => {
                         if(parseInt(btn.id) <= game.turnState.currentScore) {
                             btn.disabled = false;
                         } else {
@@ -855,12 +857,13 @@
 
                 } else {
                     document.getElementById('stopBtn').style.display = 'none';
-                    document.getElementById('availableTiles').childNodes?.forEach((btn) => {
+                    document.getElementById('availableTiles').childNodes.forEach((btn) => {
                         btn.disabled = true;
                     });
 
                 }
             } else {
+                document.getElementById('rollBtn').style.display = 'none';
                 document.getElementById('rollBtn').disabled = true;
                 document.getElementById('stopBtn').style.display = 'none';
             }
