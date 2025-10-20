@@ -1,71 +1,11 @@
-case "stop_turn":
-          const stopRoom = rooms.get(data.roomId);
-
-          if (!stopRoom || !stopRoom.game) {
-            broadcast(ws, { type: "error", message: "Game not found" });
-            return;
-          }
-
-          if (stopRoom.game.currentPlayerId !== data.playerId) {
-            broadcast(ws, { type: "error", message: "Not your turn" });
-            return;
-          }
-
-          const turnResult = endPlayerTurn(stopRoom, data.playerId);
-
-          broadcastToRoom(data.roomId, {
-            type: "turn_ended",
-            playerName: players.get(data.playerId)?.name || "Unknown",
-            gameState: getGameStateForRoom(stopRoom),
-            gameOver: turnResult.gameOver,
-          });
-
-          if (turnResult.gameOver) {
-            const winner = calculateWinner(stopRoom);
-            const gameRecord = {
-              roomName: stopRoom.name,
-              date: new Date().toISOString(),
-              winner: {
-                id: winner.winnerId,
-                name: players.get(winner.winnerId)?.name,
-                worms: winner.worms,
-              },
-              players: stopRoom.players.map((pid) => ({
-                id: pid,
-                name: players.get(pid)?.name,
-                worms: stopRoom.game.playerStacks[pid].reduce(
-                  (sum, t) => sum + t.worms,
-                  0
-                ),
-              })),
-            };
-            gameHistory.push(gameRecord);
-
-            broadcastToRoom(data.roomId, {
-              type: "game_over",
-              winner: gameRecord.winner,
-              finalScores: gameRecord.players,
-            });
-
-            stopRoom.status = "finished";
-          }
-          break;
-
-        case "get_history":          if (gameRoom.players.length < 2) {
-            broadcast(ws, {
-              type: "error",
-              message: "Need at least 2 players",
-            });
-            return;
-          }
-
-          initializeGame(data.roomId);          if (gameRoom.players.length < 2) {
-            broadcast(ws, {
-              type: "error",
-              message: "Need at least 2 players",
-            });
-            return;
-          }const express = require("express");
+if (gameRoom.players.length < 2) {
+  broadcast(ws, {
+    type: "error",
+    message: "Need at least 2 players",
+  });
+  return;
+}
+const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 const { v4: uuidv4 } = require("uuid");
@@ -173,9 +113,7 @@ function processRoll(room, playerId) {
 
   const diceResults = [];
   for (let i = 0; i < turnState.availableDice; i++) {
-    diceResults.push(
-      DICE_FACES[Math.floor(Math.random() * DICE_FACES.length)]
-    );
+    diceResults.push(DICE_FACES[Math.floor(Math.random() * DICE_FACES.length)]);
   }
 
   const faceCounts = {};
@@ -528,7 +466,8 @@ wss.on("connection", (ws) => {
           if (rollResult.bust) {
             // BUST - no available faces
             const bustResult = endPlayerTurn(rollRoom, data.playerId);
-            const currentPlayerName = players.get(rollRoom.game.currentPlayerId)?.name || "Unknown";
+            const currentPlayerName =
+              players.get(rollRoom.game.currentPlayerId)?.name || "Unknown";
 
             broadcastToRoom(data.roomId, {
               type: "turn_bust",
@@ -661,90 +600,11 @@ wss.on("connection", (ws) => {
           break;
 
         case "claim_tile":
-          const claimRoom = rooms.get(data.roomId);
-
-          if (!claimRoom || !claimRoom.game) {
-            broadcast(ws, { type: "error", message: "Game not found" });
-            return;
-          }
-
-          if (claimRoom.game.currentPlayerId !== data.playerId) {
-            broadcast(ws, { type: "error", message: "Not your turn" });
-            return;
-          }
-
-          const { turnState } = claimRoom.game;
-
-          // Validate tile can be claimed
-          if (!turnState.hasWorm || turnState.currentScore < 21) {
-            broadcast(ws, { type: "error", message: "Cannot claim tile" });
-            return;
-          }
-
-          if (turnState.availableDice > 0) {
-            broadcast(ws, { type: "error", message: "Must use all dice first" });
-            return;
-          }
-
-          const tileNumber = data.tileNumber;
-          const tileIndex = claimRoom.game.tiles.findIndex(t => t.number === tileNumber);
-
-          if (tileIndex === -1) {
-            broadcast(ws, { type: "error", message: "Tile not found" });
-            return;
-          }
-
-          if (tileNumber > turnState.currentScore) {
-            broadcast(ws, { type: "error", message: "Tile value too high" });
-            return;
-          }
-
-          // Claim the tile
-          const tile = claimRoom.game.tiles.splice(tileIndex, 1)[0];
-          claimRoom.game.playerStacks[data.playerId].push(tile);
-
-          // End turn automatically
-          const claimResult = endPlayerTurn(claimRoom, data.playerId);
-
-          broadcastToRoom(data.roomId, {
-            type: "turn_ended",
-            playerName: players.get(data.playerId)?.name || "Unknown",
-            gameState: getGameStateForRoom(claimRoom),
-            gameOver: claimResult.gameOver,
-          });
-
-          if (claimResult.gameOver) {
-            const winner = calculateWinner(claimRoom);
-            const gameRecord = {
-              roomName: claimRoom.name,
-              date: new Date().toISOString(),
-              winner: {
-                id: winner.winnerId,
-                name: players.get(winner.winnerId)?.name,
-                worms: winner.worms,
-              },
-              players: claimRoom.players.map((pid) => ({
-                id: pid,
-                name: players.get(pid)?.name,
-                worms: claimRoom.game.playerStacks[pid].reduce(
-                  (sum, t) => sum + t.worms,
-                  0
-                ),
-              })),
-            };
-            gameHistory.push(gameRecord);
-
-            broadcastToRoom(data.roomId, {
-              type: "game_over",
-              winner: gameRecord.winner,
-              finalScores: gameRecord.players,
-            });
-
-            claimRoom.status = "finished";
-          }
+          // This is not used in current flow - tiles are auto-claimed
+          // Keeping for future expansion
           break;
 
-        case "stop_turn":
+        case "get_history":
           broadcast(ws, {
             type: "game_history",
             history: gameHistory,
