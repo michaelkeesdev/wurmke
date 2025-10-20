@@ -417,11 +417,21 @@
             margin: 15px 0;
             border-left: 4px solid #f57c00;
         }
+
+        .tile-selection-info {
+            background: #fff3e0;
+            color: #f57c00;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #f57c00;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🪱 Regenwormen</h1>
+        <h1>Regenwormen</h1>
 
         <!-- Login Screen -->
         <div id="loginScreen" class="screen active">
@@ -462,7 +472,7 @@
 
             <div id="hostControls" style="display: none;">
                 <button onclick="startGame()" id="startGameBtn">Start Spel</button>
-                <p style="color: #666; margin-top: 10px;">Je hebt minimaal 3 spelers nodig om te starten.</p>
+                <p style="color: #666; margin-top: 10px;">Je hebt minimaal 2 spelers nodig om te starten.</p>
             </div>
         </div>
 
@@ -502,10 +512,9 @@
                     <div class="action-buttons" id="gameActions">
                         <button onclick="rollDice()" id="rollBtn" style="display: none;">Gooi Dobbelstenen</button>
                     </div>
-                    
-                    <div id="tileSelectionInfo" style="display: none; margin: 15px 0;">
-                        <p style="color: #f57c00; font-weight: bold;">Je kunt nu een tegel kiezen!</p>
-                        <p style="font-size: 14px;">Klik op een tegel links (je score of lager) om die te nemen.</p>
+
+                    <div id="tileSelectionInfo" class="tile-selection-info" style="display: none;">
+                        Klik op een groen tegel (je kunt kiezen tussen je score en lager!)
                     </div>
 
                     <div id="gameMessages"></div>
@@ -544,7 +553,7 @@
     <!-- Game Over Modal -->
     <div id="gameOverModal" class="modal">
         <div class="modal-content">
-            <div class="trophy">🏆</div>
+            <div class="trophy">Trophy</div>
             <h2>Spel Afgelopen!</h2>
             <h3 id="winnerName">Winnaar: </h3>
             <p id="winnerScore"></p>
@@ -631,12 +640,9 @@
                     if (data.type === 'turn_bust') {
                         showMessage(`${data.playerName} is kapotgerold! Geen geschikte dobbelstenen meer.`, 'warning');
                     } else {
-                        showMessage(`${data.playerName} heeft de beurt beëindigd.`);
+                        showMessage(`${data.playerName} heeft een tegel gekozen.`);
                     }
                     updateGameDisplay();
-                    if (data.gameOver) {
-                        setTimeout(() => {}, 1000);
-                    }
                     break;
 
                 case 'game_over':
@@ -772,13 +778,13 @@
             const playersList = document.getElementById('roomPlayersList');
             playersList.innerHTML = room.players.map(player => `
                 <div class="player-item ${player.id === room.host ? 'host' : ''}" data-player-id="${player.id}">
-                    <span>${player.name} ${player.id === room.host ? '👑' : ''}</span>
+                    <span>${player.name} ${player.id === room.host ? 'KING' : ''}</span>
                 </div>
             `).join('');
 
             if (room.host === playerId) {
                 document.getElementById('hostControls').style.display = 'block';
-                document.getElementById('startGameBtn').disabled = room.players.length < 3;
+                document.getElementById('startGameBtn').disabled = room.players.length < 2;
             } else {
                 document.getElementById('hostControls').style.display = 'none';
             }
@@ -796,7 +802,7 @@
                 return `
                     <div class="tile ${canClaim ? 'claimable' : ''}" onclick="${canClaim ? `claimTile(${tile.number})` : ''}">
                         <span>${tile.number}</span>
-                        <span class="worm-icon">${'🪱'.repeat(tile.worms)}</span>
+                        <span class="worm-icon">${'W'.repeat(tile.worms)}</span>
                     </div>
                 `;
             }).join('');
@@ -808,11 +814,11 @@
                 const totalWorms = stack.reduce((sum, tile) => sum + tile.worms, 0);
                 return `
                     <div class="player-stack">
-                        <h4>${player.name} (${totalWorms} 🪱)</h4>
+                        <h4>${player.name} (${totalWorms} W)</h4>
                         ${stack.length > 0 ? stack.map(tile => `
                             <div class="tile">
                                 <span>${tile.number}</span>
-                                <span class="worm-icon">${'🪱'.repeat(tile.worms)}</span>
+                                <span class="worm-icon">${'W'.repeat(tile.worms)}</span>
                             </div>
                         `).join('') : '<p style="color: #999;">Nog geen tegels</p>'}
                     </div>
@@ -824,7 +830,7 @@
             const currentPlayer = game.players.find(p => p.id === game.currentPlayerId);
             
             if (isMyTurn) {
-                document.getElementById('turnInfo').innerHTML = '<p style="color: #6bcf7f; font-weight: bold; font-size: 20px;">🎲 JOUW BEURT!</p>';
+                document.getElementById('turnInfo').innerHTML = '<p style="color: #6bcf7f; font-weight: bold; font-size: 20px;">JOUW BEURT!</p>';
             } else {
                 document.getElementById('turnInfo').innerHTML = `<p><strong>${currentPlayer ? currentPlayer.name : 'Onbekend'}</strong> is aan de beurt</p>`;
             }
@@ -836,7 +842,7 @@
             if (game.turnState.selectedFaces.length > 0) {
                 document.getElementById('selectedFacesArea').style.display = 'block';
                 document.getElementById('selectedFaces').innerHTML = game.turnState.selectedFaces.map(face => 
-                    `<span class="face-chip">${face === 'worm' ? '🪱' : face}</span>`
+                    `<span class="face-chip">${face === 'worm' ? 'W' : face}</span>`
                 ).join('');
             } else {
                 document.getElementById('selectedFacesArea').style.display = 'none';
@@ -844,11 +850,7 @@
 
             // Update buttons and tile selection info
             if (isMyTurn) {
-                // Show roll button only if dice available and not yet in tile selection
-                if (game.turnState.availableDice > 0 && game.turnState.selectedFaces.length === 0) {
-                    document.getElementById('rollBtn').style.display = 'inline-block';
-                    document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
-                } else if (game.turnState.availableDice > 0 && game.turnState.selectedFaces.length > 0) {
+                if (game.turnState.availableDice > 0 && document.getElementById('selectFacePrompt').style.display === 'none') {
                     document.getElementById('rollBtn').style.display = 'inline-block';
                     document.getElementById('rollBtn').textContent = `Gooi ${game.turnState.availableDice} Dobbelstenen`;
                 } else {
@@ -874,20 +876,20 @@
             const container = document.getElementById('diceContainer');
             container.innerHTML = diceResults.map(face => `
                 <div class="die ${face === 'worm' ? 'worm' : ''}">
-                    ${face === 'worm' ? '🪱' : face}
+                    ${face === 'worm' ? 'W' : face}
                 </div>
             `).join('');
 
             if (availableFaces && availableFaces.length > 0 && isMyTurn) {
                 document.getElementById('selectFacePrompt').style.display = 'block';
-                document.getElementById('rollBtn').disabled = true;
+                document.getElementById('rollBtn').style.display = 'none';
                 document.getElementById('faceButtons').innerHTML = availableFaces.map(face => {
                     const count = faceCounts[face] || 0;
                     const value = face === 'worm' ? 5 : parseInt(face);
                     const totalValue = value * count;
                     return `
                         <button onclick="selectFace('${face}')" style="margin: 5px;">
-                            ${face === 'worm' ? '🪱' : face} × ${count} = ${totalValue}pt
+                            ${face === 'worm' ? 'W' : face} x ${count} = ${totalValue}pt
                         </button>
                     `;
                 }).join('');
@@ -905,11 +907,11 @@
 
         function showGameOver(data) {
             document.getElementById('winnerName').textContent = `Winnaar: ${data.winner.name}`;
-            document.getElementById('winnerScore').textContent = `Met ${data.winner.worms} wormen! 🪱`;
+            document.getElementById('winnerScore').textContent = `Met ${data.winner.worms} wormen!`;
             
             const scoresHtml = data.finalScores.map((player, index) => `
                 <div style="padding: 10px; background: ${index === 0 ? '#ffd93d' : '#f7f7f7'}; margin: 5px 0; border-radius: 6px;">
-                    ${index + 1}. ${player.name}: ${player.worms} 🪱
+                    ${index + 1}. ${player.name}: ${player.worms} W
                 </div>
             `).join('');
             
@@ -946,7 +948,7 @@
                         <td>${date}</td>
                         <td>${game.roomName}</td>
                         <td><span class="winner-badge">${game.winner.name}</span></td>
-                        <td>${game.winner.worms} 🪱</td>
+                        <td>${game.winner.worms} W</td>
                         <td>${playersList}</td>
                     </tr>
                 `;

@@ -114,13 +114,11 @@ function processRoll(room, playerId) {
     faceCounts[face] = (faceCounts[face] || 0) + 1;
   });
 
-  // Check which faces can be selected (not already selected this turn)
   const availableFaces = Object.keys(faceCounts).filter(
     (face) => !turnState.selectedFaces.includes(face)
   );
 
   if (availableFaces.length === 0) {
-    // BUST - no valid faces to select
     return { valid: true, bust: true, diceResults };
   }
 
@@ -159,7 +157,6 @@ function selectDiceFace(room, face) {
     turnState.hasWorm = true;
   }
 
-  // Reset rolled dice for next roll
   turnState.rolledDice = [];
   turnState.faceCounts = {};
 
@@ -170,36 +167,29 @@ function endPlayerTurn(room, playerId) {
   const { game } = room;
   const { turnState } = game;
 
-  // Player must have a worm to take anything
   if (!turnState.hasWorm) {
-    // Return highest tile if player has any
     if (game.playerStacks[playerId].length > 0) {
       const lostTile = game.playerStacks[playerId].pop();
       game.tiles.push(lostTile);
       game.tiles.sort((a, b) => a.number - b.number);
     }
   } else {
-    // Player has worm - try to take tile
     const score = turnState.currentScore;
 
     if (score < 21) {
-      // Score too low, return highest tile
       if (game.playerStacks[playerId].length > 0) {
         const lostTile = game.playerStacks[playerId].pop();
         game.tiles.push(lostTile);
         game.tiles.sort((a, b) => a.number - b.number);
       }
     } else {
-      // Try to take tile matching exact score
       let takenTile = null;
 
-      // 1. Try from middle pile
       const exactIndex = game.tiles.findIndex((t) => t.number === score);
       if (exactIndex !== -1) {
         takenTile = game.tiles.splice(exactIndex, 1)[0];
         game.playerStacks[playerId].push(takenTile);
       } else {
-        // 2. Try to steal from another player's top tile
         let stolen = false;
         for (const [pid, stack] of Object.entries(game.playerStacks)) {
           if (pid !== playerId && stack.length > 0) {
@@ -214,7 +204,6 @@ function endPlayerTurn(room, playerId) {
         }
 
         if (!stolen) {
-          // 3. Take highest tile lower than score
           let bestIdx = -1;
           for (let i = game.tiles.length - 1; i >= 0; i--) {
             if (game.tiles[i].number < score) {
@@ -227,7 +216,6 @@ function endPlayerTurn(room, playerId) {
             takenTile = game.tiles.splice(bestIdx, 1)[0];
             game.playerStacks[playerId].push(takenTile);
           } else if (game.playerStacks[playerId].length > 0) {
-            // No tile available, return highest
             const lostTile = game.playerStacks[playerId].pop();
             game.tiles.push(lostTile);
             game.tiles.sort((a, b) => a.number - b.number);
@@ -237,16 +225,13 @@ function endPlayerTurn(room, playerId) {
     }
   }
 
-  // Check if game is over
   if (game.tiles.length === 0) {
     return { gameOver: true };
   }
 
-  // Next player's turn
   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % room.players.length;
   game.currentPlayerId = room.players[game.currentPlayerIndex];
 
-  // Reset turn state
   game.turnState = {
     availableDice: 8,
     selectedFaces: [],
@@ -420,10 +405,10 @@ wss.on("connection", (ws) => {
             return;
           }
 
-          if (gameRoom.players.length < 3) {
+          if (gameRoom.players.length < 2) {
             broadcast(ws, {
               type: "error",
-              message: "Need at least 3 players",
+              message: "Need at least 2 players",
             });
             return;
           }
@@ -457,10 +442,7 @@ wss.on("connection", (ws) => {
           }
 
           if (rollResult.bust) {
-            // BUST - no available faces
             const bustResult = endPlayerTurn(rollRoom, data.playerId);
-            const currentPlayerName =
-              players.get(rollRoom.game.currentPlayerId)?.name || "Unknown";
 
             broadcastToRoom(data.roomId, {
               type: "turn_bust",
@@ -499,7 +481,6 @@ wss.on("connection", (ws) => {
               rollRoom.status = "finished";
             }
           } else {
-            // Valid roll - show dice and available faces
             broadcastToRoom(data.roomId, {
               type: "dice_rolled",
               diceResults: rollResult.diceResults,
@@ -539,42 +520,75 @@ wss.on("connection", (ws) => {
           });
           break;
 
-        case "stop_turn":
-          const stopRoom = rooms.get(data.roomId);
+        case "claim_tile":
+          const claimRoom = rooms.get(data.roomId);
 
-          if (!stopRoom || !stopRoom.game) {
+          if (!claimRoom || !claimRoom.game) {
             broadcast(ws, { type: "error", message: "Game not found" });
             return;
           }
 
-          if (stopRoom.game.currentPlayerId !== data.playerId) {
+          if (claimRoom.game.currentPlayerId !== data.playerId) {
             broadcast(ws, { type: "error", message: "Not your turn" });
             return;
           }
 
-          const turnResult = endPlayerTurn(stopRoom, data.playerId);
+          const { turnState } = claimRoom.game;
+
+          if (!turnState.hasWorm || turnState.currentScore < 21) {
+            broadcast(ws, { type: "error", message: "Cannot claim tile" });
+            return;
+          }
+
+          if (turnState.availableDice > 0) {
+            broadcast(ws, {
+              type: "error",
+              message: "Must use all dice first",
+            });
+            return;
+          }
+
+          const tileNumber = data.tileNumber;
+          const tileIndex = claimRoom.game.tiles.findIndex(
+            (t) => t.number === tileNumber
+          );
+
+          if (tileIndex === -1) {
+            broadcast(ws, { type: "error", message: "Tile not found" });
+            return;
+          }
+
+          if (tileNumber > turnState.currentScore) {
+            broadcast(ws, { type: "error", message: "Tile value too high" });
+            return;
+          }
+
+          const tile = claimRoom.game.tiles.splice(tileIndex, 1)[0];
+          claimRoom.game.playerStacks[data.playerId].push(tile);
+
+          const claimResult = endPlayerTurn(claimRoom, data.playerId);
 
           broadcastToRoom(data.roomId, {
             type: "turn_ended",
             playerName: players.get(data.playerId)?.name || "Unknown",
-            gameState: getGameStateForRoom(stopRoom),
-            gameOver: turnResult.gameOver,
+            gameState: getGameStateForRoom(claimRoom),
+            gameOver: claimResult.gameOver,
           });
 
-          if (turnResult.gameOver) {
-            const winner = calculateWinner(stopRoom);
+          if (claimResult.gameOver) {
+            const winner = calculateWinner(claimRoom);
             const gameRecord = {
-              roomName: stopRoom.name,
+              roomName: claimRoom.name,
               date: new Date().toISOString(),
               winner: {
                 id: winner.winnerId,
                 name: players.get(winner.winnerId)?.name,
                 worms: winner.worms,
               },
-              players: stopRoom.players.map((pid) => ({
+              players: claimRoom.players.map((pid) => ({
                 id: pid,
                 name: players.get(pid)?.name,
-                worms: stopRoom.game.playerStacks[pid].reduce(
+                worms: claimRoom.game.playerStacks[pid].reduce(
                   (sum, t) => sum + t.worms,
                   0
                 ),
@@ -588,13 +602,8 @@ wss.on("connection", (ws) => {
               finalScores: gameRecord.players,
             });
 
-            stopRoom.status = "finished";
+            claimRoom.status = "finished";
           }
-          break;
-
-        case "claim_tile":
-          // This is not used in current flow - tiles are auto-claimed
-          // Keeping for future expansion
           break;
 
         case "get_history":
